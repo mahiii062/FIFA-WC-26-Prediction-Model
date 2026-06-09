@@ -9,6 +9,9 @@ st.set_page_config(
     page_title="FIFA World Cup 2026 Predictor", page_icon="⚽", layout="wide"
 )
 
+# st.title("FIFA World Cup 2026")
+# st.write("Hybrid Football Prediction Model (Elo + Poisson)")
+
 st.markdown(
     """
 <style>
@@ -58,8 +61,8 @@ st.markdown(
 st.markdown(
     """
 <div class="hero">
-    <h1> FIFA World Cup 2026 Predictor</h1>
-    <p><b>Hybrid Football Prediction Model (Elo + Poisson)</b></p>
+    <h1>⚽ FIFA World Cup 2026 Predictor</h1>
+    <p>Hybrid Football Prediction Model (Elo + Poisson)</p>
 </div>
 """,
     unsafe_allow_html=True,
@@ -231,3 +234,138 @@ with c4:
     )
 
 st.divider()
+
+
+# MATCH PREDICTOR
+def predict(home, away, neutral):
+
+    he = elo.get(home, 1500)
+    ae = elo.get(away, 1500)
+
+    h_adv = 100 if not neutral else 0
+    diff = he - ae + h_adv
+
+    ha, aa = att.get(home, 1), att.get(away, 1)
+    hd, ad = deff.get(home, 1), deff.get(away, 1)
+
+    diff = diff / 200  # normalization
+
+    lam_h = np.exp(
+        h_p["Intercept"]
+        + h_p["elo_diff"] * diff
+        + h_p["home_att"] * ha
+        + h_p["away_def"] * ad
+    )
+
+    lam_a = np.exp(
+        a_p["Intercept"]
+        + a_p["elo_diff"] * diff
+        + a_p["away_att"] * aa
+        + a_p["home_def"] * hd
+    )
+
+    lam_h = np.clip(lam_h, 0.05, 5)
+    lam_a = np.clip(lam_a, 0.05, 5)
+
+    max_g = 7
+
+    ph = poisson.pmf(np.arange(max_g + 1), lam_h)
+    pa = poisson.pmf(np.arange(max_g + 1), lam_a)
+
+    mat = np.outer(ph, pa)
+
+    p_home = np.sum(np.tril(mat, -1))
+    p_draw = np.sum(np.diag(mat))
+    p_away = np.sum(np.triu(mat, 1))
+
+    total = p_home + p_draw + p_away + 1e-9
+
+    p_home /= total
+    p_draw /= total
+    p_away /= total
+
+    score = f"{np.argmax(ph)}-{np.argmax(pa)}"
+
+    if np.argmax(ph) > np.argmax(pa):
+        verdict = "Home Win"
+    elif np.argmax(pa) > np.argmax(ph):
+        verdict = "Away Win"
+    else:
+        verdict = "Draw"
+
+    return p_home, p_draw, p_away, score, verdict
+
+
+# UI
+tab1, tab2 = st.tabs(["Match Predictions", "Match Simulator"])
+
+# TAB 1
+with tab1:
+    st.subheader("Fixtures Prediction")
+
+    preds = []
+
+    for _, row in wc.iterrows():
+        p1, pd_, p2, score, verdict = predict(
+            row["home_team"], row["away_team"], row["neutral"]
+        )
+
+        preds.append(
+            {
+                "Home": row["home_team"],
+                "Away": row["away_team"],
+                "Home Win %": f"{p1*100:.1f}%",
+                "Draw %": f"{pd_*100:.1f}%",
+                "Away Win %": f"{p2*100:.1f}%",
+                "Score": score,
+                "Result": verdict,
+            }
+        )
+
+    pred_df = pd.DataFrame(preds)
+
+    st.dataframe(pred_df, use_container_width=True, hide_index=True, height=650)
+
+
+# TAB 2
+with tab2:
+    st.subheader("Match Simulator")
+
+    teams = sorted(list(elo.keys()))
+
+    c1, c2 = st.columns(2)
+
+    h = c1.selectbox("Home", teams)
+    a = c2.selectbox("Away", teams)
+
+    st.markdown("### Select Teams")
+
+if st.button("Predict Match", width="stretch"):
+
+    p1, pd_, p2, score, verdict = predict(h, a, True)
+
+    m1, m2, m3 = st.columns(3)
+
+    with m1:
+        st.metric(
+            label=f"{h}",
+            value=f"{p1*100:.1f}%"
+        )
+
+    with m2:
+        st.metric(
+            label="Draw",
+            value=f"{pd_*100:.1f}%"
+        )
+
+    with m3:
+        st.metric(
+            label=f"{a}",
+            value=f"{p2*100:.1f}%"
+        )
+
+    st.success(f"Predicted Score: {score}")
+
+    st.markdown(
+        f"Expected Result: **{verdict}**"
+    )
