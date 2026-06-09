@@ -61,7 +61,7 @@ st.markdown(
 st.markdown(
     """
 <div class="hero">
-    <h1>⚽ FIFA World Cup 2026 Predictor</h1>
+    <h1>FIFA World Cup 2026 Predictor</h1>
     <p>Hybrid Football Prediction Model (Elo + Poisson)</p>
 </div>
 """,
@@ -297,7 +297,7 @@ def predict(home, away, neutral):
 
 
 # UI
-tab1, tab2 = st.tabs(["Match Predictions", "Match Simulator"])
+tab1, tab2 = st.tabs(["Match Predictions for Group Stage", "Match Simulator"])
 
 # TAB 1
 with tab1:
